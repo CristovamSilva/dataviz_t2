@@ -59,46 +59,63 @@ def bmi(df: pd.DataFrame):
 
 
 def activities(df: pd.DataFrame):
-    st.subheader("🏃 Active and Sedentary Classification Across Activity Levels")
+    st.subheader("🏃 Active and Sedentary Classification by Weekly Activity Duration")
 
-    # Make sure 'physical_activities' has correct order
-    activity_order = ["none", "low", "moderate", "high"]
-    df["physical_activities"] = pd.Categorical(
-        df["physical_activities"], categories=activity_order, ordered=True
+    # Remap to WHO hour-based labels
+    activity_label_map = {
+        "none": "0 min / week",
+        "low": "Less than 150min / week",
+        "moderate": "More than 150min / week",
+        "high": "More than 240min / week",
+    }
+
+    order = ["none", "low", "moderate", "high"]
+    label_order = [activity_label_map[o] for o in order]
+
+    df["activity_level"] = df["physical_activities"].map(activity_label_map)
+    df["activity_level"] = pd.Categorical(
+        df["activity_level"], categories=label_order, ordered=True
     )
 
-    # Melt active/sedentary into long format for grouped plotting
+    # Melt active/sedentary columns
     melted = df.melt(
-        id_vars="physical_activities",
+        id_vars="activity_level",
         value_vars=["active", "sedentary"],
         var_name="Classification",
         value_name="Value",
     )
 
-    # Filter to only True values
     melted = melted[melted["Value"] == True]
 
-    # Count combinations
+    # Calculate percentages
     counts = (
-        melted.groupby(["physical_activities", "Classification"])
+        melted.groupby(["activity_level", "Classification"])
         .size()
-        .reset_index(name="count")
+        .div(len(df))
+        .mul(100)
+        .reset_index(name="Percentage")
     )
 
-    # Plot
+    # Plot as vertical grouped bars
     fig = px.bar(
         counts,
-        x="physical_activities",
-        y="count",
+        x="activity_level",
+        y="Percentage",
         color="Classification",
         barmode="group",
-        title="Active and Sedentary Counts by Physical Activity Level",
-        labels={
-            "physical_activities": "Physical Activity Level",
-            "count": "Number of Individuals",
-            "Classification": "",
-        },
+        text="Percentage",
         color_discrete_map={"active": "#59a14f", "sedentary": "#e15759"},
+        title="Active vs. Sedentary by Physical Activity Duration",
+        labels={"activity_level": "Weekly Activity Duration"},
+    )
+
+    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+
+    fig.update_layout(
+        xaxis_title=None,
+        yaxis_title="Percentage of People",
+        margin=dict(t=40, b=40),
+        legend_title_text="",
     )
 
     st.plotly_chart(fig, use_container_width=True)
