@@ -83,10 +83,16 @@ def sleep_disturbances(df: pd.DataFrame):
         symptom_counts["Symptom"].str.replace("_", " ").str.title()
     )
 
+    # Sort symptoms consistently
+    symptom_counts["Symptom"] = pd.Categorical(
+        symptom_counts["Symptom"], categories=symptom_counts["Symptom"], ordered=True
+    )
+
     fig = px.bar(
         symptom_counts,
-        x="Symptom",
-        y="Percentage",
+        y="Symptom",
+        x="Percentage",
+        orientation="h",
         text="Percentage",
         title="Prevalence of Sleep-Related Symptoms",
     )
@@ -94,11 +100,13 @@ def sleep_disturbances(df: pd.DataFrame):
     fig.update_traces(
         marker_color="#4e79a7", texttemplate="%{text:.1f}%", textposition="outside"
     )
+
     fig.update_layout(
         showlegend=False,
-        xaxis_tickangle=30,
+        xaxis_title=None,
         yaxis_title=None,
-        yaxis=dict(visible=False),
+        yaxis=dict(categoryorder="total ascending"),
+        margin=dict(t=40, b=30, l=10, r=10),
     )
 
     st.plotly_chart(fig, use_container_width=True)

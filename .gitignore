@@ -16,8 +16,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# --- Streamlit ---
-.streamlit/config.toml
 
 # If you want to keep the theme config in Git, remove the line above.
 

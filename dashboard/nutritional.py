@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 
 
 def nutrition_impact(df: pd.DataFrame):
-    st.subheader("🍽️ Perceived Nutrition & Its Impact")
+    st.subheader("🍽️ Nutritional Health Impact on Well-Being")
     st.markdown(
         "This shows how people rated the impact of their nutritional health on their well-being, "
         "from very negative (-5) to very positive (+5)."
@@ -71,7 +71,7 @@ def nutrition_impact(df: pd.DataFrame):
 
 
 def self_eval_nutrition(df: pd.DataFrame):
-    st.subheader("🍽️ Perceived Nutrition & Its Impact")
+    st.subheader("🍽️ Perceived Nutritional Health")
 
     counts = (
         df["self_eval_nutrition"]
