@@ -8,12 +8,40 @@ import plotly.graph_objects as go
 def bmi(df: pd.DataFrame):
     st.subheader("⚖️ Weight vs. Height Colored by BMI Category")
 
+    # Rename category for consistency
+    df["bmi_category"] = df["bmi_category"].replace(
+        {"Peso Elevado": "Obesidade grau 1"}
+    )
+
+    # Define desired order and color for categories
+    bmi_order = [
+        "Abaixo do peso.",
+        "Peso normal",
+        "Obesidade grau 1",
+        "Obesidade grau 2",
+        "Obesidade grau 3",
+    ]
+
+    bmi_colors = {
+        "Abaixo do peso.": "#1f77b4",  # blue
+        "Peso normal": "#59a14f",  # green
+        "Obesidade grau 1": "#e15759",  # red
+        "Obesidade grau 2": "#f28e2b",  # orange
+        "Obesidade grau 3": "#d62728",  # dark red
+    }
+
+    # Enforce order in the data
+    df["bmi_category"] = pd.Categorical(
+        df["bmi_category"], categories=bmi_order, ordered=True
+    )
+
     fig = px.scatter(
         df,
         x="height",
         y="weight",
         color="bmi_category",
-        size="bmi",  # optional: size by BMI
+        category_orders={"bmi_category": bmi_order},
+        size="bmi",
         hover_data=["bmi", "bmi_category"],
         labels={
             "height": "Height (cm)",
@@ -23,6 +51,7 @@ def bmi(df: pd.DataFrame):
         },
         title="Physical Health: Weight vs Height by BMI Category",
         opacity=0.7,
+        color_discrete_map=bmi_colors,
     )
 
     fig.update_layout(legend_title_text="BMI Category")
@@ -78,33 +107,50 @@ def activities(df: pd.DataFrame):
 def sitting_time(df: pd.DataFrame):
     st.subheader("🪑 Sitting Time Category vs Excessiveness")
 
-    # Define category order (if needed)
-    cat_order = ["lt_2h", "lt_4h", "lt_6h", "gt_6h"]
+    # Define label map and order
+    freq_label_map = {
+        "lt_2h": "Less than 2 hours",
+        "lt_4h": "Less than 4 hours",
+        "lt_6h": "Less than 6 hours",
+        "gt_6h": "More than 6 hours",
+    }
+    label_order = list(freq_label_map.values())
+
+    # Replace labels
+    df["sit_down_time_daily"] = df["sit_down_time_daily"].replace(freq_label_map)
     df["sit_down_time_daily"] = pd.Categorical(
-        df["sit_down_time_daily"], categories=cat_order, ordered=True
+        df["sit_down_time_daily"], categories=label_order, ordered=True
     )
 
-    # Count combinations
+    # Group and count
     counts = (
         df.groupby(["sit_down_time_daily", "excessive_sit_down_time"])
         .size()
         .reset_index(name="count")
     )
 
-    # Plot grouped bar
+    # Compute % of total population
+    total = counts["count"].sum()
+    counts["percent"] = (counts["count"] / total * 100).round(1)
+
+    # Plot
     fig = px.bar(
         counts,
         x="sit_down_time_daily",
-        y="count",
+        y="percent",
         color="excessive_sit_down_time",
         barmode="group",
-        title="Sitting Time Categories vs Excessive Sitting Classification",
+        title="Sitting Time vs Excessive Sitting Classification",
+        color_discrete_map={True: "#e15759", False: "#59a14f"},
         labels={
             "sit_down_time_daily": "Sitting Time Category",
             "excessive_sit_down_time": "Excessive Sitting",
-            "count": "Number of People",
+            "percent": "Percentage of People",
         },
-        color_discrete_map={True: "#e15759", False: "#59a14f"},
+    )
+
+    fig.update_layout(
+        yaxis=dict(range=[0, 100]),
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -113,42 +159,38 @@ def sitting_time(df: pd.DataFrame):
 def pain(df: pd.DataFrame):
     st.subheader("🩻 Weekly Pain Frequency")
 
-    # Count values per pain level
-    back_counts = df["back_pain_weekly"].value_counts().sort_index()
-    body_counts = df["body_pain_weekly"].value_counts().sort_index()
+    # Define the pain columns to process
+    pain_columns = {
+        "back_pain_weekly": ("Back Pain", "#4e79a7"),
+        "body_pain_weekly": ("Body Pain", "#f28e2b"),
+        "headache_weekly": ("Headache", "#e15759"),
+    }
 
-    # Ensure full index range (0–7)
+    # Ensure x-axis includes all days 0–7
     index = pd.Index(range(8), name="Days")
-    back_counts = back_counts.reindex(index, fill_value=0)
-    body_counts = body_counts.reindex(index, fill_value=0)
 
     fig = go.Figure()
 
-    fig.add_trace(
-        go.Scatter(
-            x=back_counts.index,
-            y=back_counts.values,
-            mode="lines+markers",
-            name="Back Pain",
-            line=dict(color="#4e79a7"),
-        )
-    )
-
-    fig.add_trace(
-        go.Scatter(
-            x=body_counts.index,
-            y=body_counts.values,
-            mode="lines+markers",
-            name="Body Pain",
-            line=dict(color="#f28e2b"),
-        )
-    )
+    for col, (label, color) in pain_columns.items():
+        if col in df.columns:
+            counts = df[col].value_counts(normalize=True).sort_index() * 100
+            counts = counts.reindex(index, fill_value=0)
+            fig.add_trace(
+                go.Scatter(
+                    x=counts.index,
+                    y=counts.values,
+                    mode="lines+markers",
+                    name=label,
+                    line=dict(color=color),
+                )
+            )
 
     fig.update_layout(
-        title="Pain Frequency by Number of Days per Week",
+        title="Weekly Pain: Percentage of People by Days per Week",
         xaxis_title="Days per Week with Pain",
-        yaxis_title="Number of People",
+        yaxis_title="Percentage of People",
         xaxis=dict(dtick=1),
+        yaxis=dict(range=[0, 100]),
         hovermode="x unified",
     )
 
@@ -158,7 +200,12 @@ def pain(df: pd.DataFrame):
 def show(df: pd.DataFrame):
     template("🏃 Physical Health", df)
 
+    st.markdown("---")
     bmi(df)
+    st.markdown("---")
     activities(df)
+    st.markdown("---")
     sitting_time(df)
+    st.markdown("---")
     pain(df)
+    st.markdown("---")

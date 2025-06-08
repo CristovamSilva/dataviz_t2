@@ -2,12 +2,77 @@ import streamlit as st
 import pandas as pd
 from .health_dash import template
 import plotly.express as px
+import plotly.graph_objects as go
+
+
+def nutrition_impact(df: pd.DataFrame):
+    st.subheader("🍽️ Perceived Nutrition & Its Impact")
+    st.markdown(
+        "This shows how people rated the impact of their nutritional health on their well-being, "
+        "from very negative (-5) to very positive (+5)."
+    )
+
+    # Prepare data
+    counts = (
+        df["self_eval_nutrition_well_being"]
+        .value_counts(normalize=True)
+        .reindex(range(-5, 6), fill_value=0)
+        .mul(100)
+        .round(1)
+        .reset_index()
+    )
+    counts.columns = ["Score", "Percentage"]
+
+    # Define color per sentiment
+    counts["Color"] = counts["Score"].apply(
+        lambda x: "#e15759" if x < 0 else "#59a14f" if x > 0 else "#bab0ac"
+    )
+
+    # Create lollipop chart (vertical stems + dots)
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=counts["Score"],
+            y=counts["Percentage"],
+            mode="lines+markers",
+            line=dict(color="rgba(0,0,0,0)"),  # invisible line for stems
+            marker=dict(
+                size=12, color=counts["Color"], line=dict(width=1, color="black")
+            ),
+            hovertemplate="Score: %{x}<br>%{y:.1f}%",
+            showlegend=False,
+        )
+    )
+
+    # Add stems as individual vertical lines
+    for _, row in counts.iterrows():
+        fig.add_shape(
+            type="line",
+            x0=row["Score"],
+            y0=0,
+            x1=row["Score"],
+            y1=row["Percentage"],
+            line=dict(color=row["Color"], width=2),
+        )
+
+    fig.update_layout(
+        title="Self-Evaluated Mental Well-Being (Scale: -5 to 5)",
+        xaxis=dict(dtick=1, title="Score", tickmode="linear"),
+        yaxis=dict(
+            title="Percentage of People", range=[0, counts["Percentage"].max() + 5]
+        ),
+        template="plotly_white",
+        height=400,
+        margin=dict(t=50, b=40, l=30, r=30),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def self_eval_nutrition(df: pd.DataFrame):
-    st.subheader("🍽️ Perceived Nutritional Quality")
+    st.subheader("🍽️ Perceived Nutrition & Its Impact")
 
-    # --- Perceived Diet Quality (Yes/No) ---
     counts = (
         df["self_eval_nutrition"]
         .map({True: "Yes", False: "No"})
@@ -19,32 +84,26 @@ def self_eval_nutrition(df: pd.DataFrame):
     counts.columns = ["Response", "Proportion"]
     counts["Percentage"] = (counts["Proportion"] * 100).round(1)
 
-    fig = px.pie(
+    fig1 = px.bar(
         counts,
-        names="Response",
-        values="Proportion",
-        hole=0.4,
-        title="Do You Believe You Eat Well?",
+        x="Response",
+        y="Percentage",
+        text="Percentage",
         color="Response",
         color_discrete_map={"Yes": "#59a14f", "No": "#e15759"},
     )
-    fig.update_traces(textinfo="label+percent")
-    st.plotly_chart(fig, use_container_width=True)
 
-    st.markdown("#### 🧠 Perceived Impact of Nutrition on Overall Well-Being")
+    fig1.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
 
-    fig2 = px.histogram(
-        df,
-        x="self_eval_nutrition_well_being",
-        nbins=11,
-        title="Impact Scale (-5 = Very Negative, +5 = Very Positive)",
-        labels={"self_eval_nutrition_well_being": "Impact Score"},
-        color_discrete_sequence=["#4e79a7"],
+    fig1.update_layout(
+        title="Answer to the question: 'Do You Believe You Eat Well?'",
+        showlegend=False,
+        xaxis_title=None,
+        yaxis=dict(visible=False),
+        margin=dict(t=40, b=20),
     )
 
-    fig2.update_layout(xaxis=dict(dtick=1), yaxis_title="Number of People")
-
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig1, use_container_width=True)
 
 
 def water_intake_bar_grouped(df):
@@ -96,7 +155,14 @@ def food_frequency_distribution(df: pd.DataFrame):
         "gt_5": "6-7x/week",
     }
 
-    def prep_data(columns, group_label):
+    color_map = {
+        "None": "#d9f0d3",
+        "1-2x/week": "#a6dba0",
+        "3-5x/week": "#5aae61",
+        "6-7x/week": "#1b7837",
+    }
+
+    def prep_data(columns):
         data = []
         for col in columns:
             dist = df[col].value_counts(normalize=True).reindex(order).fillna(0)
@@ -110,25 +176,12 @@ def food_frequency_distribution(df: pd.DataFrame):
                 )
         return pd.DataFrame(data)
 
-    unhealthy_df = prep_data(unhealthy, "Unhealthy")
-    healthy_df = prep_data(healthy, "Healthy")
+    unhealthy_df = prep_data(unhealthy)
+    healthy_df = prep_data(healthy)
 
     col1, col2 = st.columns(2)
 
     with col1:
-        fig1 = px.bar(
-            unhealthy_df,
-            x="Food",
-            y="Percent",
-            color="Frequency",
-            text="Percent",
-            title="Unhealthy Foods",
-            color_discrete_sequence=px.colors.qualitative.Set2,
-        )
-        fig1.update_layout(barmode="stack", yaxis_title="%", xaxis_title=None)
-        st.plotly_chart(fig1, use_container_width=True)
-
-    with col2:
         fig2 = px.bar(
             healthy_df,
             x="Food",
@@ -136,14 +189,45 @@ def food_frequency_distribution(df: pd.DataFrame):
             color="Frequency",
             text="Percent",
             title="Healthy Foods",
-            color_discrete_sequence=px.colors.qualitative.Set2,
+            color_discrete_map=color_map,
         )
-        fig2.update_layout(barmode="stack", yaxis_title="%", xaxis_title=None)
+        fig2.update_layout(
+            barmode="stack",
+            yaxis_title="Percentage",
+            xaxis_title=None,
+            legend_title_text="Frequency",
+        )
+        fig2.update_traces(texttemplate="%{text:.1f}%", textposition="inside")
         st.plotly_chart(fig2, use_container_width=True)
+
+    with col2:
+        fig1 = px.bar(
+            unhealthy_df,
+            x="Food",
+            y="Percent",
+            color="Frequency",
+            text="Percent",
+            title="Unhealthy Foods",
+            color_discrete_map=color_map,
+        )
+        fig1.update_layout(
+            barmode="stack",
+            yaxis_title="Percentage",
+            xaxis_title=None,
+            legend_title_text="Frequency",
+        )
+        fig1.update_traces(texttemplate="%{text:.1f}%", textposition="inside")
+        st.plotly_chart(fig1, use_container_width=True)
 
 
 def show(df: pd.DataFrame):
     template("🥦 Nutritional Health", df)
+    st.markdown("---")
+    nutrition_impact(df)
+    st.markdown("---")
     self_eval_nutrition(df)
-    water_intake_bar_grouped(df)
+    st.markdown("---")
     food_frequency_distribution(df)
+    st.markdown("---")
+    water_intake_bar_grouped(df)
+    st.markdown("---")

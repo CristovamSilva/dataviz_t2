@@ -71,6 +71,7 @@ sleep_df = filtered_df[sleep_columns]
 
 # Mental Health DataFrame
 mental_columns = [
+    "self_eval_mental_well_being",
     "burnout",
     "forgetfulness",
     "work_satisfaction",
@@ -176,19 +177,19 @@ categories = [
 st.markdown("""
 # Health Survey Dashboard
 
-Welcome to this interactive dashboard built to explore responses from a large-scale health and lifestyle survey.
+Welcome to this interactive dashboard designed to explore responses from a large-scale health and lifestyle survey.
 
 ---
 ### 🔍 Dashboard Structure
 Use the tabs below to explore different dimensions of the data:
 
-- **Dataset**: Get an overview of the raw input, column structure, and sample entries.
-- **Demographics**: Understand who the respondents are — age, sex, education, marital status, work model, insurance coverage and their perception about their own quality of life and well being.
-- **Health Blocks**: Explore how participants perceive their health and how they responded about their own health across multiple domains.
+- **Demographics**: Understand the respondents: age, sex, education, marital status, work model, insurance, and their self-assessed quality of life and well-being.
+- **Health Blocks**: Analyze participants' perceptions of their health and their self-reported responses across multiple health domains.
+- **Dataset**: Review the raw input data, including its column structure and representative sample entries.
 ---
 
 """)
-st.sidebar.markdown(f"**Showing {len(filtered_df)} respondents**")
+
 tabs = st.tabs([cat["name"] for cat in categories])
 
 for tab, cat in zip(tabs, categories):

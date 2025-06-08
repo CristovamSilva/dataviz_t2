@@ -4,23 +4,12 @@ import plotly.express as px
 from .health_dash import template
 
 
-def show(df: pd.DataFrame):
-    df["age"] = df["heart_age"] - df["years_lost"]
-    template("🩺 Clinical Health", df)
-    heart_age(df)
-    smoking(df)
-    bowel_health(df)
-    medication_usage(df)
-    medical_followup(df)
-    health_history(df)
-    exam_gaps(df)
-
-
 def heart_age(df: pd.DataFrame):
     st.markdown("### Heart Age")
     st.markdown(
         "Heart age is a measure of your cardiovascular health, indicating how your heart's age compares to your actual age. A lower heart age suggests better heart health."
     )
+
     # Group by actual age
     avg_lost = df.groupby("age")["years_lost"].mean().reset_index()
 
@@ -33,6 +22,9 @@ def heart_age(df: pd.DataFrame):
         labels={"age": "Actual Age", "years_lost": "Years Lost (Heart Age - Age)"},
     )
 
+    # Make the line red and thicker
+    fig.update_traces(line=dict(color="#e15759", width=3))
+
     # Add flat line at 0 for reference
     fig.add_hline(
         y=0,
@@ -42,9 +34,9 @@ def heart_age(df: pd.DataFrame):
         annotation_position="bottom right",
     )
 
-    # Force visible baseline and allow negative range
+    # Adjust layout
     fig.update_layout(
-        yaxis=dict(title="Years Lost", range=[-5, 15]),  # adjust as needed
+        yaxis=dict(title="Years Lost", range=[-5, 15]),
         xaxis_title="Actual Age",
         hovermode="x unified",
         template="plotly_white",
@@ -54,79 +46,99 @@ def heart_age(df: pd.DataFrame):
 
 
 def smoking(df):
-    st.subheader("🚬 Smoking Behavior: Status vs Quit Intention")
+    st.subheader("🚬 Smoking Behavior")
 
-    # Derive smoking status
-    df["smoking_status"] = df.apply(
-        lambda row: "Non-smoker"
-        if not row["smoker"]
-        else "Smoker: Wants to Quit"
-        if row["quit_smoking"]
-        else "Smoker: Doesn't Want to Quit",
-        axis=1,
-    )
+    df["smoking_status"] = df["smoker"].map({True: "Smoker", False: "Non-smoker"})
 
-    # Count and calculate percentages
-    counts = df["smoking_status"].value_counts(normalize=True).reset_index()
-    counts.columns = ["Smoking Status", "Proportion"]
-    counts["Percentage"] = (counts["Proportion"] * 100).round(1)
+    col1, col2 = st.columns(2)
 
-    # Plot as percent
-    fig = px.bar(
-        counts,
-        x="Smoking Status",
-        y="Percentage",
-        color="Smoking Status",
-        text="Percentage",
-        title="Smoking Status (as Percentage of Population)",
-        color_discrete_sequence=["#59a14f", "#edc949", "#e15759"],
-    )
+    # --- Chart 1: Smokers vs Non-smokers in population ---
+    status_counts = df["smoking_status"].value_counts(normalize=True).reset_index()
+    status_counts.columns = ["Smoking Status", "Proportion"]
+    status_counts["Percentage"] = (status_counts["Proportion"] * 100).round(1)
 
-    fig.update_layout(
-        showlegend=False,
-        yaxis_title="Percentage of People",
-        xaxis_title=None,
-        yaxis=dict(range=[0, 100]),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    with col1:
+        fig1 = px.bar(
+            status_counts,
+            x="Smoking Status",
+            y="Percentage",
+            color="Smoking Status",
+            text="Percentage",
+            title="Population: Smokers vs Non-smokers",
+            color_discrete_sequence=["#59a14f", "#e15759"],
+        )
+        fig1.update_layout(
+            showlegend=False,
+            yaxis_title="Percentage",
+            xaxis_title=None,
+            yaxis=dict(range=[0, 100]),
+        )
+        st.plotly_chart(fig1, use_container_width=True)
+
+    # --- Chart 2: Among smokers, quit intention ---
+    smoker_df = df[df["smoker"] == True]
+    if not smoker_df.empty:
+        smoker_df["quit_status"] = smoker_df["quit_smoking"].map(
+            {True: "Wants to Quit", False: "Doesn't Want to Quit"}
+        )
+        smoker_counts = (
+            smoker_df["quit_status"].value_counts(normalize=True).reset_index()
+        )
+        smoker_counts.columns = ["Quit Intention", "Proportion"]
+        smoker_counts["Percentage"] = (smoker_counts["Proportion"] * 100).round(1)
+
+        with col2:
+            fig2 = px.bar(
+                smoker_counts,
+                x="Quit Intention",
+                y="Percentage",
+                color="Quit Intention",
+                text="Percentage",
+                title="Among Smokers: Quit Intention",
+                color_discrete_sequence=["#59a14f", "#e15759"],
+            )
+            fig2.update_layout(
+                showlegend=False,
+                yaxis_title="Percentage",
+                xaxis_title=None,
+                yaxis=dict(range=[0, 100]),
+            )
+            st.plotly_chart(fig2, use_container_width=True)
 
 
 # --- Bowel Health ---
 def bowel_health(df: pd.DataFrame):
     st.subheader("🧻 Bowel Health")
 
-    # 1. Bowel movements per week
-    fig1 = px.histogram(
-        df,
-        x="bowel_movements",
-        nbins=8,
-        title="Bowel Movements per Week",
-        labels={"bowel_movements": "Days per Week"},
-        color_discrete_sequence=["#4e79a7"],
-    )
-    fig1.update_layout(xaxis=dict(dtick=1), yaxis_title="Number of People")
-    st.plotly_chart(fig1, use_container_width=True)
-
-    # 2. Constipation prevalence
     counts = (
-        df["constipation"].value_counts(normalize=True).reindex([True, False]).fillna(0)
+        df["constipation"]
+        .value_counts(normalize=True)
+        .reset_index()
+        .replace({True: "Constipated", False: "Not Constipated"})
     )
-    data = pd.DataFrame(
-        {
-            "Response": ["Yes", "No"],
-            "Percent": [round(counts[True] * 100, 1), round(counts[False] * 100, 1)],
-        }
+    counts.columns = ["label", "value"]
+
+    fig = px.pie(
+        counts,
+        names="label",
+        values="value",
+        hole=0.3,
+        color="label",
+        color_discrete_map={
+            "Constipated": "#e15759",  # red
+            "Not Constipated": "#59a14f",  # green
+        },
     )
 
-    fig2 = px.pie(
-        data,
-        names="Response",
-        values="Percent",
-        title="Constipation (Self-Reported)",
-        color_discrete_sequence=["#e15759", "#bab0ac"],
+    fig.update_traces(textinfo="percent+label", showlegend=False)
+    fig.update_layout(
+        title_text="Constipation (Self-Reported)",
+        uniformtext_minsize=12,
+        uniformtext_mode="hide",
+        margin=dict(t=40, b=10, l=10, r=10),
     )
-    fig2.update_traces(textinfo="label+percent")
-    st.plotly_chart(fig2, use_container_width=True)
+
+    st.plotly_chart(fig, use_container_width=True)
 
 
 # --- Medication Use ---
@@ -150,22 +162,41 @@ def medication_usage(df: pd.DataFrame):
         no = round(counts[False] * 100, 1)
         data.append({"Label": label, "Yes": yes, "No": no})
 
+    # Maintain defined order top-to-bottom
+    ordered_labels = list(columns.values())
     plot_df = pd.DataFrame(data).melt(
         id_vars="Label", var_name="Response", value_name="Percent"
+    )
+    plot_df["Label"] = pd.Categorical(
+        plot_df["Label"], categories=ordered_labels, ordered=True
     )
 
     fig = px.bar(
         plot_df,
-        x="Label",
-        y="Percent",
+        y="Label",
+        x="Percent",
         color="Response",
         barmode="stack",
+        orientation="h",
         text="Percent",
         color_discrete_map={"Yes": "#e15759", "No": "#bab0ac"},
         title="Medication and Drug Use",
+        category_orders={"Label": ordered_labels},
     )
-    fig.update_layout(xaxis_tickangle=30, yaxis_title="Percentage")
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="inside")
+
+    fig.update_layout(
+        xaxis=dict(showgrid=False, visible=False),
+        yaxis_title=None,
+        xaxis_title=None,
+        showlegend=True,
+        bargap=0.2,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.1f}%", textposition="inside", insidetextanchor="middle"
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -174,10 +205,8 @@ def medical_followup(df: pd.DataFrame):
     st.subheader("🩺 Health Professional Appointments")
 
     columns = {
-        "appointments_dentist": "Dentist",
         "appointments_generalist": "General Practitioner",
-        "appointments_nutritionist": "Nutritionist",
-        "appointments_psychologist": "Psychologist",
+        "appointments_dentist": "Dentist",
     }
 
     data = []
@@ -187,22 +216,40 @@ def medical_followup(df: pd.DataFrame):
         no = round(counts[False] * 100, 1)
         data.append({"Label": label, "Yes": yes, "No": no})
 
+    ordered_labels = list(columns.values())
     plot_df = pd.DataFrame(data).melt(
         id_vars="Label", var_name="Response", value_name="Percent"
+    )
+    plot_df["Label"] = pd.Categorical(
+        plot_df["Label"], categories=ordered_labels, ordered=True
     )
 
     fig = px.bar(
         plot_df,
-        x="Label",
-        y="Percent",
+        y="Label",
+        x="Percent",
         color="Response",
         barmode="stack",
+        orientation="h",
         text="Percent",
         color_discrete_map={"Yes": "#59a14f", "No": "#bab0ac"},
-        title="Appointments with Health Professionals",
+        title="Health Appointments",
+        category_orders={"Label": ordered_labels},
     )
-    fig.update_layout(xaxis_tickangle=30, yaxis_title="Percentage")
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="inside")
+
+    fig.update_layout(
+        xaxis=dict(showgrid=False, visible=False),
+        yaxis_title=None,
+        xaxis_title=None,
+        showlegend=True,
+        bargap=0.2,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.1f}%", textposition="inside", insidetextanchor="middle"
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -211,8 +258,8 @@ def health_history(df: pd.DataFrame):
     st.subheader("📋 Personal and Family Medical History")
 
     columns = {
-        "clean_family_history": "No Family Medical History",
         "clean_medical_history": "No Personal Medical History",
+        "clean_family_history": "No Family Medical History",
     }
 
     data = []
@@ -222,22 +269,40 @@ def health_history(df: pd.DataFrame):
         no = round(counts[False] * 100, 1)
         data.append({"Label": label, "Yes": yes, "No": no})
 
+    ordered_labels = list(columns.values())
     plot_df = pd.DataFrame(data).melt(
         id_vars="Label", var_name="Response", value_name="Percent"
+    )
+    plot_df["Label"] = pd.Categorical(
+        plot_df["Label"], categories=ordered_labels, ordered=True
     )
 
     fig = px.bar(
         plot_df,
-        x="Label",
-        y="Percent",
+        y="Label",
+        x="Percent",
         color="Response",
         barmode="stack",
+        orientation="h",
         text="Percent",
-        color_discrete_map={"Yes": "#4e79a7", "No": "#bab0ac"},
+        color_discrete_map={"Yes": "#59a14f", "No": "#bab0ac"},
         title="Clean Medical Background",
+        category_orders={"Label": ordered_labels},
     )
-    fig.update_layout(xaxis_tickangle=30, yaxis_title="Percentage")
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="inside")
+
+    fig.update_layout(
+        xaxis=dict(showgrid=False, visible=False),
+        yaxis_title=None,
+        xaxis_title=None,
+        showlegend=True,
+        bargap=0.2,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.1f}%", textposition="inside", insidetextanchor="middle"
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -259,20 +324,58 @@ def exam_gaps(df: pd.DataFrame):
         no = round(counts[False] * 100, 1)
         data.append({"Label": label, "Yes": yes, "No": no})
 
+    ordered_labels = list(columns.values())
     plot_df = pd.DataFrame(data).melt(
         id_vars="Label", var_name="Response", value_name="Percent"
+    )
+    plot_df["Label"] = pd.Categorical(
+        plot_df["Label"], categories=ordered_labels, ordered=True
     )
 
     fig = px.bar(
         plot_df,
-        x="Label",
-        y="Percent",
+        y="Label",
+        x="Percent",
         color="Response",
         barmode="stack",
+        orientation="h",
         text="Percent",
-        color_discrete_map={"Yes": "#f28e2b", "No": "#bab0ac"},
-        title="Lack of Preventive Exams",
+        color_discrete_map={"Yes": "#e15759", "No": "#bab0ac"},
+        title="Preventive Exams Missing",
+        category_orders={"Label": ordered_labels},
     )
-    fig.update_layout(xaxis_tickangle=30, yaxis_title="Percentage")
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="inside")
+
+    fig.update_layout(
+        xaxis=dict(showgrid=False, visible=False),
+        yaxis_title=None,
+        xaxis_title=None,
+        showlegend=True,
+        bargap=0.2,
+        margin=dict(l=0, r=0, t=40, b=0),
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.1f}%", textposition="inside", insidetextanchor="middle"
+    )
+
     st.plotly_chart(fig, use_container_width=True)
+
+
+def show(df: pd.DataFrame):
+    template("🩺 Clinical Health", df)
+
+    st.markdown("---")
+    heart_age(df)
+    st.markdown("---")
+    bowel_health(df)
+    st.markdown("---")
+    smoking(df)
+    st.markdown("---")
+    medication_usage(df)
+    st.markdown("---")
+    health_history(df)
+    st.markdown("---")
+    medical_followup(df)
+    st.markdown("---")
+    exam_gaps(df)
+    st.markdown("---")
